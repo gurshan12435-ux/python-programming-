@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Python Progress Tracker</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --card: #1e293b;
+    --accent: #3b82f6;
+    --text: #f1f5f9;
+    --muted: #94a3b8;
+    --done: #22c55e;
+    --border: #334155;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 32px 16px;
+  }
+  .wrap { max-width: 640px; margin: 0 auto; }
+  h1 { font-size: 1.6rem; margin-bottom: 4px; }
+  p.sub { color: var(--muted); margin-top: 0; margin-bottom: 24px; }
+  .progress-bar-outer {
+    background: var(--border);
+    border-radius: 999px;
+    height: 10px;
+    overflow: hidden;
+    margin-bottom: 24px;
+  }
+  .progress-bar-inner {
+    background: var(--done);
+    height: 100%;
+    width: 0%;
+    transition: width 0.3s ease;
+  }
+  .stats { color: var(--muted); font-size: 0.9rem; margin-bottom: 16px; }
+  ul { list-style: none; padding: 0; margin: 0 0 20px 0; }
+  li {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 8px;
+  }
+  li.done span.label { text-decoration: line-through; color: var(--muted); }
+  li input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    accent-color: var(--done);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  li span.label { flex: 1; }
+  li button.del {
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 1rem;
+    padding: 4px 8px;
+  }
+  li button.del:hover { color: #ef4444; }
+  .add-row {
+    display: flex;
+    gap: 8px;
+  }
+  .add-row input[type="text"] {
+    flex: 1;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--text);
+    font-size: 0.95rem;
+  }
+  .add-row button {
+    background: var(--accent);
+    border: none;
+    color: white;
+    padding: 10px 18px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.95rem;
+  }
+  .add-row button:hover { background: #2563eb; }
+  .empty { color: var(--muted); text-align: center; padding: 20px 0; }
+  .reset {
+    margin-top: 28px;
+    text-align: center;
+  }
+  .reset button {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 6px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.85rem;
+  }
+  .reset button:hover { color: #ef4444; border-color: #ef4444; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>🐍 Python Progress Tracker</h1>
+    <p class="sub">Tick off what you've learned. Add new topics anytime. Your progress is saved automatically.</p>
+
+    <div class="progress-bar-outer">
+      <div class="progress-bar-inner" id="progressBar"></div>
+    </div>
+    <div class="stats" id="stats">Loading...</div>
+
+    <ul id="topicList"></ul>
+    <div class="empty" id="emptyMsg" style="display:none;">No topics yet — add your first one below 👇</div>
+
+    <div class="add-row">
+      <input type="text" id="newTopic" placeholder="e.g. List Comprehensions" />
+      <button onclick="addTopic()">Add</button>
+    </div>
+
+    <div class="reset">
+      <button onclick="resetAll()">Reset all progress</button>
+    </div>
+  </div>
+
+<script>
+  const DEFAULT_TOPICS = [
+    { id: 't1', label: 'Basics (variables, I/O)', done: true },
+    { id: 't2', label: 'Conditionals & Loops', done: false },
+    { id: 't3', label: 'Functions', done: false },
+    { id: 't4', label: 'Data Structures', done: false },
+    { id: 't5', label: 'OOP', done: false },
+    { id: 't6', label: 'Projects', done: false }
+  ];
+  const STORAGE_KEY = 'python-progress-topics';
+  let topics = [];
+
+  async function loadTopics() {
+    try {
+      const result = await window.storage.get(STORAGE_KEY, false);
+      topics = result ? JSON.parse(result.value) : DEFAULT_TOPICS;
+    } catch (e) {
+      topics = DEFAULT_TOPICS;
+    }
+    render();
+  }
+
+  async function saveTopics() {
+    try {
+      await window.storage.set(STORAGE_KEY, JSON.stringify(topics), false);
+    } catch (e) {
+      console.error('Could not save progress:', e);
+    }
+  }
+
+  function render() {
+    const list = document.getElementById('topicList');
+    const emptyMsg = document.getElementById('emptyMsg');
+    list.innerHTML = '';
+
+    if (topics.length === 0) {
+      emptyMsg.style.display = 'block';
+    } else {
+      emptyMsg.style.display = 'none';
+      topics.forEach(t => {
+        const li = document.createElement('li');
+        if (t.done) li.classList.add('done');
+        li.innerHTML = `
+          <input type="checkbox" ${t.done ? 'checked' : ''} onchange="toggleTopic('${t.id}')" />
+          <span class="label">${escapeHtml(t.label)}</span>
+          <button class="del" onclick="deleteTopic('${t.id}')" title="Remove">✕</button>
+        `;
+        list.appendChild(li);
+      });
+    }
+
+    const doneCount = topics.filter(t => t.done).length;
+    const total = topics.length;
+    const pct = total === 0 ? 0 : Math.round((doneCount / total) * 100);
+    document.getElementById('progressBar').style.width = pct + '%';
+    document.getElementById('stats').textContent = total === 0
+      ? 'No topics yet'
+      : `${doneCount} of ${total} topics complete (${pct}%)`;
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  function toggleTopic(id) {
+    const t = topics.find(x => x.id === id);
+    if (t) t.done = !t.done;
+    render();
+    saveTopics();
+  }
+
+  function deleteTopic(id) {
+    topics = topics.filter(x => x.id !== id);
+    render();
+    saveTopics();
+  }
+
+  function addTopic() {
+    const input = document.getElementById('newTopic');
+    const label = input.value.trim();
+    if (!label) return;
+    topics.push({ id: 't' + Date.now(), label, done: false });
+    input.value = '';
+    render();
+    saveTopics();
+  }
+
+  document.getElementById('newTopic').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') addTopic();
+  });
+
+  function resetAll() {
+    if (confirm('Reset all progress? This will restore the default topic list.')) {
+      topics = JSON.parse(JSON.stringify(DEFAULT_TOPICS));
+      render();
+      saveTopics();
+    }
+  }
+
+  loadTopics();
+</script>
+</body>
+</html>
